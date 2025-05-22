@@ -1,0 +1,6 @@
+# Binários executáveis
+*.exe
+*.out
+*.app
+*.exe~
+
