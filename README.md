@@ -1,6 +1,12 @@
 # Processamento de Imagens
 
-Repositório para armazenar os códigos do processamento de imagens.
+Repositório para armazenar os códigos do processamento de imagens. Ele implementa os filtros de:
+
+1. Sobel 3x3
+2. Sobel Expandido 5x5
+3. Prewitt 3x3
+4. Roberts 2x2
+5. Laplaciano 5x5
 
 ## Como executar
 
