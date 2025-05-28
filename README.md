@@ -1,4 +1,4 @@
-# Processamento de Imagens
+# PROBLEMA 3 - SISTEMAS DIGITAIS - Processamento de Imagens
 
 Repositório para armazenar os códigos do processamento de imagens. Ele implementa os filtros de:
 
