@@ -1,7 +1,12 @@
-#include "png_io.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>  // opcional se usar sqrt
+#include <math.h>
 
 #define WIDTH 320
 #define HEIGHT 240
@@ -46,7 +51,21 @@ void extract_window(unsigned char img[HEIGHT][WIDTH], int x, int y, unsigned cha
 
 int main() {
     const char* input = "imagem.png";
-    const char* output = "sobel_output.png";
+    const char* output_gray = "grayscale.png";
+    const char* output_sobel = "sobel_output.png";
+
+    int img_width, img_height, channels;
+    unsigned char* input_data = stbi_load(input, &img_width, &img_height, &channels, 3);
+    if (!input_data) {
+        printf("Erro ao carregar a imagem: %s\n", input);
+        return 1;
+    }
+
+    if (img_width != WIDTH || img_height != HEIGHT) {
+        printf("A imagem precisa ter %dx%d pixels.\n", WIDTH, HEIGHT);
+        stbi_image_free(input_data);
+        return 1;
+    }
 
     unsigned char rgb[HEIGHT][WIDTH][3];
     unsigned char grayscale[HEIGHT][WIDTH];
@@ -55,6 +74,25 @@ int main() {
     int gx_buffer[HEIGHT][WIDTH] = {0};
     int gy_buffer[HEIGHT][WIDTH] = {0};
 
+    // Copia dados da imagem original para o array 3D
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            int idx = (y * WIDTH + x) * 3;
+            rgb[y][x][0] = input_data[idx + 0];
+            rgb[y][x][1] = input_data[idx + 1];
+            rgb[y][x][2] = input_data[idx + 2];
+        }
+    }
+
+    stbi_image_free(input_data); // libera imagem original
+
+    rgb_to_grayscale(rgb, grayscale);
+
+    // Salva a imagem em tons de cinza
+    stbi_write_png(output_gray, WIDTH, HEIGHT, 1, grayscale, WIDTH);
+    printf("Imagem grayscale salva em %s\n", output_gray);
+
+    // Filtros Sobel
     int sobel_gx[3][3] = {
         {-1, 0, 1},
         {-2, 0, 2},
@@ -65,13 +103,6 @@ int main() {
         { 0,  0,  0},
         {-1, -2, -1}
     };
-
-    if (read_png(input, rgb)) {
-        fprintf(stderr, "Erro lendo a imagem\n");
-        return 1;
-    }
-
-    rgb_to_grayscale(rgb, grayscale);
 
     // Fase 1: calcula gx
     for (int y = 0; y < HEIGHT; y++) {
@@ -91,19 +122,21 @@ int main() {
         }
     }
 
-    // Fase 3: calcula G = |gx| + |gy|
+    // Fase 3: calcula magnitude real G = parte inteira de sqrt(gx^2 + gy^2)
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             int gx = gx_buffer[y][x];
             int gy = gy_buffer[y][x];
-            int g = abs(gx) + abs(gy); // aproximação da magnitude
+            int g = (int)sqrtf((float)(gx * gx + gy * gy)); // truncar raiz
             if (g > 255) g = 255;
             sobel_result[y][x] = (unsigned char)g;
         }
     }
 
-    save_grayscale_png(output, sobel_result);
-    printf("Imagem Sobel salva em %s\n", output);
+    // Salva imagem do Sobel
+    stbi_write_png(output_sobel, WIDTH, HEIGHT, 1, sobel_result, WIDTH);
+    printf("Imagem Sobel salva em %s\n", output_sobel);
+
     return 0;
 }
 
