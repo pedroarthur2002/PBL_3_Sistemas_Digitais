@@ -10,7 +10,7 @@ $(S_FILE).o: $(S_FILE).s
 	as -o $(S_FILE).o $(S_FILE).s
 
 $(C_FILE).o: $(C_FILE).c interface.h stb_image.h stb_image_write.h
-	gcc -c -o $(C_FILE).o $(C_FILE).c -lm
+	gcc -c -o $(C_FILE).o $(C_FILE).c -lm 
 
 $(FILTERS_FILE).o: $(FILTERS_FILE).c interface.h
 	gcc -c -o $(FILTERS_FILE).o $(FILTERS_FILE).c
