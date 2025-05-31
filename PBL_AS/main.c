@@ -232,11 +232,11 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
                 gx = gx_buffer[y][x];
                 gy = gy_buffer[y][x];
                 
-                g = abs(gx) + abs(gy); // Aproximação Manhattan
-                // g = (int)sqrt(gx * gx + gy * gy);
+                // g = abs(gx) + abs(gy); Aproximação Manhattan
+                g = (int)sqrt(gx * gx + gy * gy);
 
                 if (g > 255) g = 255;
-                if (g < 0) g = 255;
+                if (g < 0) g = 0;
                 
                 result[y][x] = (unsigned char)g;
             }
@@ -251,7 +251,7 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
                 // CORREÇÃO: Para Laplaciano, usar valor absoluto
                 g = abs(g);
                 if (g > 255) g = 255;
-                if (g < 0) g = 255;
+                if (g < 0) g = 0;
                 
                 result[y][x] = (unsigned char)g;
             }
