@@ -11,7 +11,7 @@ data_in_ptr: .word 0         @ ponteiro para base do data_in
 .global data_out_ptr
 data_out_ptr: .word 0       @ ponteiro para base do data_out
 
-.global fd_mem 
+.global fd_mem
 fd_mem: .space 4              @ file descriptor do open()
 
 .section .text
@@ -134,15 +134,16 @@ skip_close:
     BX lr
 
 @ void send_all_data(*params)
-@ params = {int8_t* a, int8_t* b, uint32_t opcode, uint32_t size}
+@ params = {int8_t* a, int8_t* b, uint32_t opcode, uint32_t size, uint32_t scalar}
 send_all_data:
-    PUSH {r4-r11, lr}
+    PUSH {r3-r11, lr}
     
     @ R0 = ponteiro para struct Params
-    LDR r4, [r0]            @ a
-    LDR r5, [r0, #4]        @ b
+    LDR r4, [r0]            @ a (pixel window)
+    LDR r5, [r0, #4]        @ b (kernel Gx)
     LDR r6, [r0, #8]        @ opcode
     LDR r7, [r0, #12]       @ size
+    LDR r8, [r0, #16]       @ c (kernel Gy)
     
     @ Envia pulso de reset e de start para o módulo da FPGA
     LDR r2, =data_in_ptr
@@ -175,18 +176,21 @@ loop_send:
     BGE end_send            @ sai do loop se índice >= 25
     
     @ Carrega valores das matrizes
-    LDRSB r0, [r4, r10]     @ r0 = matrix_a[i], com sinal
-    LDRSB r1, [r5, r10]     @ r1 = matrix_b[i], com sinal
+    LDRB r0, [r4, r10]      @ r0 = pixel (sem sinal)
+    LDRSB r1, [r5, r10]     @ r1 = kernel Gx (com sinal)
+    LDRSB r3, [r8, r10]     @ r3 = kernel Gy (com sinal)
 
-    AND r0, r0, #0xFF       @ Remove extensão de sinal, mantém apenas [7:0]
-    AND r1, r1, #0xFF       @ Remove extensão de sinal, mantém apenas [7:0]
+    AND r0, r0, #0xFF       @ Pixel [7:0]
+    AND r1, r1, #0xFF       @ Kernel Gx [7:0]
+    AND r3, r3, #0xFF       @ Kernel Gy [7:0]
     
-    LSL r1, r1, #8          @ desloca B para posição [15:8]
-    ORR r0, r0, r1          @ combina A e B nos bits [15:0]
-    
-    @ Adiciona os campos de controle
-    ORR r0, r0, r6, LSL #16 @ insere opcode nos bits [17:16]
-    ORR r0, r0, r7, LSL #19 @ insere size nos bits [20:19]
+    @ Empacota: [31] | [30:29] size | [28:21] Gy | [20:16] opcode | [15:8] Gx | [7:0] pixel
+    LSL r3, r3, #21         @ Gy para posição [28:21]
+    LSL r1, r1, #8          @ Gx para posição [15:8]
+    ORR r0, r0, r1          @ Combina pixel + Gx
+    ORR r0, r0, r3          @ Adiciona Gy
+    ORR r0, r0, r6, LSL #16 @ Adiciona opcode [20:16]
+    ORR r0, r0, r7, LSL #29 @ Adiciona size [30:29]
     
     PUSH {r0}               @ Salva o valor de r0 antes da chamada da função
     MOV r1, #1              @ sinaliza tipo de envio (1 = dado normal)
@@ -198,7 +202,7 @@ loop_send:
     
 end_send:
     MOV r0, #0              @ Retorna sucesso
-    POP {r4-r11, lr}
+    POP {r3-r11, lr}
     BX lr
 
 delay_loop:
@@ -206,7 +210,7 @@ delay_loop:
     BNE delay_loop
     BX lr
 
-@ int read_all_results(int8_t* result, uint8_t* overflow_flag)
+@ int read_all_results(int8_t* result)
 @ Retorna HW_SUCCESS (0) se bem-sucedido ou HW_ERROR (1) se falhar
 read_all_results:
     PUSH {r4-r7, lr}
@@ -278,10 +282,9 @@ handshake_send:
     POP {r1-r4, lr}
     BX lr
 
-@ int handshake_receive(uint8_t* value_out, uint8_t* overflow_out)
+@ int handshake_receive(uint8_t* value_out)
 @ Entrada:
 @ r0 = ponteiro para armazenar valor de matriz
-@ r1 = ponteiro para armazenar overflow flag
 @ Saída:
 @ r0 = código de status (0 = sucesso, 1 = erro)
 handshake_receive:

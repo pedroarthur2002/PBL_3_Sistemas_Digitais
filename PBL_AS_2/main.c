@@ -7,21 +7,17 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "interface.h"
 #include <math.h>
 #include <string.h>
-#include <limits.h>
-#include "interface.h"
 
 #define MATRIX_SIZE 25
 #define WIDTH 320
 #define HEIGHT 240
 
-// Aumentar precisão - usar int16_t para janelas e int32_t para resultados
-typedef int16_t pixel_t;
-typedef int32_t result_t;
-
 // Variável global para armazenar a imagem em escala de cinza
 unsigned char grayscale[HEIGHT][WIDTH];
+static int8_t kernel_zero[MATRIX_SIZE] = {0};
 
 // Função para redimensionar e carregar imagem usando STB Image
 int resize_and_load_image(const char* filename, unsigned char rgb[HEIGHT][WIDTH][3]) {
@@ -79,6 +75,7 @@ void save_grayscale_png(const char* filename, unsigned char gray[HEIGHT][WIDTH])
     }
 }
 
+
 // Converte RGB para grayscale
 void rgb_to_grayscale(unsigned char rgb[HEIGHT][WIDTH][3], unsigned char gray[HEIGHT][WIDTH]) {
     int y, x;
@@ -92,169 +89,117 @@ void rgb_to_grayscale(unsigned char rgb[HEIGHT][WIDTH][3], unsigned char gray[HE
     }
 }
 
-// Função de extração de janela simplificada - TODAS AS JANELAS SÃO 5x5
-void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, pixel_t window[MATRIX_SIZE]) {
-    int i, j, idx = 0;
-    int px, py;
+// Extrai janela NxN ao redor do pixel (x,y) e lineariza em vetor
+void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint8_t window[MATRIX_SIZE], int filter_size) {
+    int i, j, idx, px, py;
+    int half_size;
     
-    // Sempre extrai uma janela 5x5 centrada em (x,y)
-    for (i = -2; i <= 2; i++) {
-        for (j = -2; j <= 2; j++) {
-            px = x + j;
-            py = y + i;
-            
-            if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
-                window[idx] = (pixel_t)img[py][px];
-            } else {
-                window[idx] = 0; // padding para bordas
+    // Inicializa todo o vetor com zeros
+    for (i = 0; i < MATRIX_SIZE; i++) {
+        window[i] = 0;
+    }
+    
+    // Determina o tamanho real da janela baseado no código de tamanho
+    switch(filter_size) {
+        case 0: // Roberts 2x2
+            half_size = 0; // sem padding, pega 2x2 a partir do pixel atual
+            break;
+        case 1: // 3x3
+            half_size = 1;
+            break;
+        case 3: // 5x5
+            half_size = 2;
+            break;
+        default:
+            half_size = 1;
+    }
+    
+    idx = 0;
+    
+    if (filter_size == 0) { // Caso especial para Roberts 2x2
+        for (i = 0; i < 2; i++) {
+            for (j = 0; j < 2; j++) {
+                px = x + j;
+                py = y + i;
+                if (px < WIDTH && py < HEIGHT) {
+                    window[idx] = (uint8_t)img[py][px];
+                }
+                idx++;
             }
-            idx++;
+        }
+    } else {
+        // Para filtros 3x3 e 5x5
+        for (i = -half_size; i <= half_size; i++) {
+            for (j = -half_size; j <= half_size; j++) {
+                px = x + j;
+                py = y + i;
+                if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+                    window[idx] = (uint8_t)img[py][px];
+                } else {
+                    window[idx] = 0; // padding para bordas
+                }
+                idx++;
+            }
         }
     }
 }
 
-// Função de convolução simplificada - sempre usa 25 elementos
-result_t compute_convolution(pixel_t* image_window, int8_t* filter_kernel, uint32_t size_code) {
-    result_t result = 0;
+// Calcula a convolução usando a FPGA - CORRIGIDA
+int compute_convolution(uint8_t* image_window, int8_t* filter_kernel_gx, int8_t* filter_kernel_gy, uint32_t size_code) {
+    uint8_t result[MATRIX_SIZE];
     int i;
-    
-    // Sempre processa todos os 25 elementos da matriz 5x5
-    for (i = 0; i < MATRIX_SIZE; i++) {
-        result += (result_t)image_window[i] * (result_t)filter_kernel[i];
+   
+    struct Params params = {
+        .a = image_window,
+        .b = filter_kernel_gx,
+        .opcode = 7,
+        .size = size_code,
+        .c = filter_kernel_gx
+    };
+   
+    if (send_all_data(&params) != HW_SUCCESS) {
+        fprintf(stderr, "Falha no envio de dados para a FPGA\n");
+        return 0;
     }
-    
-    return result;
-}
-
-// Função de normalização adaptativa por tipo de filtro
-unsigned char normalize_pixel_adaptive(result_t value, result_t min_val, result_t max_val, int filter_type) {
-    result_t normalized;
-    
-    if (max_val == min_val) return 128; // valor médio se não há variação
-    
-    switch(filter_type) {
-        case 4: // Roberts - mais sensível, amplia pequenas variações
-            normalized = ((value - min_val) * 300) / (max_val - min_val);
-            if (normalized > 255) normalized = 255;
-            break;
-            
-        case 5: // Laplaciano - destaca zeros-crossing
-            // Para Laplaciano, valores próximos de zero são bordas
-            normalized = (abs(value) * 255) / max_val;
-            break;
-            
-        default: // Sobel, Prewitt - normalização padrão
-            normalized = ((value - min_val) * 255) / (max_val - min_val);
+   
+    if (read_all_results(result) != HW_SUCCESS) {
+        fprintf(stderr, "Falha na leitura dos resultados da FPGA\n");
+        return 0;
     }
-    
-    if (normalized < 0) return 0;
-    if (normalized > 255) return 0;
-    return (unsigned char)normalized;
-}
+    return (int)result[0]; 
+ }
 
+// Calcula a imagem com o filtro de borda selecionado - CORRIGIDA
 void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, unsigned char result[HEIGHT][WIDTH]) {
-    static result_t gx_buffer[HEIGHT][WIDTH];
-    static result_t gy_buffer[HEIGHT][WIDTH];
-    static result_t magnitude_buffer[HEIGHT][WIDTH];
-    
     int x, y;
-    pixel_t window[MATRIX_SIZE];
-    result_t min_val, max_val;
+    uint8_t window[MATRIX_SIZE];
     
-    printf("Processando imagem com filtro de borda...\n");
+    printf("Processando imagem com filtro de borda (gradiente completo)...\n");
     
-    // Inicializa buffers
-    memset(gx_buffer, 0, sizeof(gx_buffer));
-    memset(gy_buffer, 0, sizeof(gy_buffer));
-    memset(magnitude_buffer, 0, sizeof(magnitude_buffer));
-    
-    // Fase 1: Calcula gradiente Gx
-    printf("Calculando gradiente Gx...\n");
     for (y = 0; y < HEIGHT; y++) {
         if (y % 40 == 0) printf("Processando linha %d/%d\n", y, HEIGHT);
         
         for (x = 0; x < WIDTH; x++) {
-            extract_window_linear(grayscale, x, y, window);
-            gx_buffer[y][x] = compute_convolution(window, filter_gx, 3); // sempre usa janela 5x5
+            extract_window_linear(grayscale, x, y, window, size_code);
+            result[y][x] = compute_convolution(window, filter_gx, filter_gy, size_code);
         }
     }
-    
-    // Fase 2: Calcula gradiente Gy (se fornecido)
-    if (filter_gy != NULL) {
-        printf("Calculando gradiente Gy...\n");
-        for (y = 0; y < HEIGHT; y++) {
-            if (y % 40 == 0) printf("Processando linha %d/%d\n", y, HEIGHT);
-            
-            for (x = 0; x < WIDTH; x++) {
-                extract_window_linear(grayscale, x, y, window);
-                gy_buffer[y][x] = compute_convolution(window, filter_gy, 3);
-            }
-        }
-        
-        // Fase 3: Calcula magnitude
-        printf("Calculando magnitude...\n");
-        min_val = INT32_MAX;
-        max_val = INT32_MIN;
-        
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                result_t gx = gx_buffer[y][x];
-                result_t gy = gy_buffer[y][x];
-                
-                // Magnitude euclidiana otimizada
-                magnitude_buffer[y][x] = (result_t)sqrt((double)(gx * gx + gy * gy));
-                
-                if (magnitude_buffer[y][x] < min_val) min_val = magnitude_buffer[y][x];
-                if (magnitude_buffer[y][x] > max_val) max_val = magnitude_buffer[y][x];
-            }
-        }
-        
-        // Normalização final com tipo de filtro
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                result[y][x] = normalize_pixel_adaptive(magnitude_buffer[y][x], min_val, max_val, size_code);
-            }
-        }
-        
-    } else {
-        // Caso filtro unidirecional (Laplaciano)
-        printf("Processando filtro unidirecional...\n");
-        min_val = INT32_MAX;
-        max_val = INT32_MIN;
-        
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                magnitude_buffer[y][x] = gx_buffer[y][x]; // sem valor absoluto para Laplaciano
-                
-                if (magnitude_buffer[y][x] < min_val) min_val = magnitude_buffer[y][x];
-                if (magnitude_buffer[y][x] > max_val) max_val = magnitude_buffer[y][x];
-            }
-        }
-        
-        // Normalização especial para Laplaciano
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                result[y][x] = normalize_pixel_adaptive(magnitude_buffer[y][x], min_val, max_val, 5);
-            }
-        }
-    }
-    
-    printf("Filtro aplicado! Min: %ld, Max: %ld\n", (long)min_val, (long)max_val);
+    printf("Filtro de gradiente aplicado com sucesso!\n");
 }
-
 
 int validate_operation(uint32_t selection) {
     if (selection < 1 || selection > 6) {
         fprintf(stderr, "Opção inválida: %u\n", selection);
-        return -1; // Trocar por constante apropriada
+        return HW_SEND_FAIL;
     }
-    return 0; // Trocar por constante apropriada
+    return HW_SUCCESS;
 }
 
 int main() {
     char output[100];
+    char jpg_output[100];
     unsigned char rgb[HEIGHT][WIDTH][3];
-    static unsigned char filter_result[HEIGHT][WIDTH];  // usar static para arrays grandes
+    unsigned char filter_result[HEIGHT][WIDTH];
     uint32_t selection;
     int y, x;
     
@@ -278,6 +223,13 @@ int main() {
     rgb_to_grayscale(rgb, grayscale);
     save_grayscale_png("imagem_cinza.png", grayscale);
     printf("Imagem em escala de cinza salva como 'imagem_cinza.png'\n");
+    
+    // Inicializa o hardware
+    printf("Inicializando hardware...\n");
+    if (init_hw_access() != HW_SUCCESS) {
+        fprintf(stderr, "Falha na inicialização do hardware\n");
+        return EXIT_FAILURE;
+    }
     
     while (1) {
         selection = 0;
@@ -303,7 +255,7 @@ int main() {
             break;
         }
         
-        if (validate_operation(selection) != 0) {
+        if (validate_operation(selection) != HW_SUCCESS) {
             continue;
         }
         
@@ -335,7 +287,7 @@ int main() {
                 
             case 5:
                 printf("\nAplicando filtro Laplaciano 5x5...\n");
-                operation_filter(laplaciano_5x5, NULL, 3, filter_result);
+                operation_filter(laplaciano_5x5, kernel_zero, 3, filter_result);
                 sprintf(output, "laplaciano_5x5_output.png");
                 break;
                 
@@ -344,12 +296,16 @@ int main() {
                 continue;
         }
         
-        // Salva a imagem resultante
+        // Salva a imagem resultante em múltiplos formatos
         printf("Salvando resultado...\n");
         save_grayscale_png(output, filter_result);
         
         printf("Imagem salva como '%s'\n", output);
     }
+    
+    // Limpa os recursos
+    printf("Liberando recursos do hardware...\n");
+    close_hw_access();
     
     return EXIT_SUCCESS;
 }
