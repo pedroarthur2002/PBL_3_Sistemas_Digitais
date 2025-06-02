@@ -315,6 +315,11 @@ int main() {
             filter_result[y][x] = 0;
         }
     }
+
+    if (init_hw_access() != 0) {
+        fprintf(stderr, "Falha ao inicializar hardware\n");
+        return EXIT_FAILURE;
+    }
     
     printf("\n========= FILTRO DE BORDA COM STB_IMAGE =========\n");
     
