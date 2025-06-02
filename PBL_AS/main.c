@@ -14,9 +14,9 @@
 
 #define MATRIX_SIZE 25
 #define WIDTH 320
-#define HEIGHT 240
+#define HEIGHT 240  
 
-// Aumentar precisão - usar int16_t para janelas e int32_t para resultados
+// Aumentar precisão - usar uint8_t para janelas e int16_t para resultados
 typedef uint8_t pixel_t;
 typedef int16_t result_t;
 // Variável global para armazenar a imagem em escala de cinza
@@ -98,7 +98,7 @@ void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint3
     int i, j, idx;
     int px, py;
     
-    // PRIMEIRO: Zera toda a janela 5x5
+    // Zera toda a janela 5x5
     memset(window, 0, MATRIX_SIZE * sizeof(pixel_t));
     
     if (size_code == 0) {
@@ -152,15 +152,14 @@ void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint3
     }
 }
 
-// Função de convolução simplificada - sempre usa 25 elementos
-int compute_convolution(int8_t* image_window, int8_t* filter_kernel, uint32_t size_code) {
-    uint8_t result[MATRIX_SIZE];
+int compute_convolution(pixel_t* image_window, int8_t* filter_kernel, uint32_t size_code) {
+    pixel_t result[MATRIX_SIZE];
     int i;
    
     struct Params params = {
-        .a = image_window,
+        .a = image_window,  
         .b = filter_kernel,
-        .opcode = 7, // Código para multiplicação de matrizes/convolução
+        .opcode = 7,
         .size = size_code
     };
     
@@ -173,8 +172,9 @@ int compute_convolution(int8_t* image_window, int8_t* filter_kernel, uint32_t si
         fprintf(stderr, "Falha na leitura dos resultados da FPGA\n");
         return 0;
     } 
-    result_t resul_final = (int16_t)((result[1] << 8) | result[0]);
-    return resul_final;
+    
+    result_t result_final = (int16_t)((result[1] << 8) | result[0]);
+    return result_final;
 }
 
 // Função de normalização adaptativa por tipo de filtro
@@ -209,7 +209,6 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
     static result_t magnitude_buffer[HEIGHT][WIDTH];
     
     int x, y;
-    pixel_t window[MATRIX_SIZE];
     result_t min_val, max_val;
     
     printf("Processando imagem com filtro de borda...\n");
@@ -225,8 +224,8 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
         if (y % 40 == 0) printf("Processando linha %d/%d\n", y, HEIGHT);
         
         for (x = 0; x < WIDTH; x++) {
-            extract_window_linear(grayscale, x, y, window);
-            gx_buffer[y][x] = compute_convolution(window, filter_gx, 3); // sempre usa janela 5x5
+            extract_window_linear(grayscale, x, y, size_code);
+            gx_buffer[y][x] = compute_convolution(window, filter_gx, 3);
         }
     }
     
@@ -237,7 +236,7 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
             if (y % 40 == 0) printf("Processando linha %d/%d\n", y, HEIGHT);
             
             for (x = 0; x < WIDTH; x++) {
-                extract_window_linear(grayscale, x, y, window);
+                extract_window_linear(grayscale, x, y, size_code);
                 gy_buffer[y][x] = compute_convolution(window, filter_gy, 3);
             }
         }
@@ -315,7 +314,7 @@ int main() {
             filter_result[y][x] = 0;
         }
     }
-
+    
     if (init_hw_access() != 0) {
         fprintf(stderr, "Falha ao inicializar hardware\n");
         return EXIT_FAILURE;
