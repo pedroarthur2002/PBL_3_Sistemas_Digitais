@@ -37,9 +37,9 @@ module sqrt (
 	q,
 	remainder);
 
-	input	[7:0]  radical;
-	output	[3:0]  q;
-	output	[4:0]  remainder;
+	input	[31:0]  radical;
+	output	[15:0]  q;
+	output	[16:0]  remainder;
 
 endmodule
 
@@ -50,19 +50,19 @@ endmodule
 // Retrieval info: PRIVATE: SYNTH_WRAPPER_GEN_POSTFIX STRING "0"
 // Retrieval info: LIBRARY: altera_mf altera_mf.altera_mf_components.all
 // Retrieval info: CONSTANT: PIPELINE NUMERIC "0"
-// Retrieval info: CONSTANT: Q_PORT_WIDTH NUMERIC "4"
-// Retrieval info: CONSTANT: R_PORT_WIDTH NUMERIC "5"
-// Retrieval info: CONSTANT: WIDTH NUMERIC "8"
-// Retrieval info: USED_PORT: q 0 0 4 0 OUTPUT NODEFVAL "q[3..0]"
-// Retrieval info: USED_PORT: radical 0 0 8 0 INPUT NODEFVAL "radical[7..0]"
-// Retrieval info: USED_PORT: remainder 0 0 5 0 OUTPUT NODEFVAL "remainder[4..0]"
-// Retrieval info: CONNECT: @radical 0 0 8 0 radical 0 0 8 0
-// Retrieval info: CONNECT: q 0 0 4 0 @q 0 0 4 0
-// Retrieval info: CONNECT: remainder 0 0 5 0 @remainder 0 0 5 0
+// Retrieval info: CONSTANT: Q_PORT_WIDTH NUMERIC "16"
+// Retrieval info: CONSTANT: R_PORT_WIDTH NUMERIC "17"
+// Retrieval info: CONSTANT: WIDTH NUMERIC "32"
+// Retrieval info: USED_PORT: q 0 0 16 0 OUTPUT NODEFVAL "q[15..0]"
+// Retrieval info: USED_PORT: radical 0 0 32 0 INPUT NODEFVAL "radical[31..0]"
+// Retrieval info: USED_PORT: remainder 0 0 17 0 OUTPUT NODEFVAL "remainder[16..0]"
+// Retrieval info: CONNECT: @radical 0 0 32 0 radical 0 0 32 0
+// Retrieval info: CONNECT: q 0 0 16 0 @q 0 0 16 0
+// Retrieval info: CONNECT: remainder 0 0 17 0 @remainder 0 0 17 0
 // Retrieval info: GEN_FILE: TYPE_NORMAL sqrt.v TRUE
 // Retrieval info: GEN_FILE: TYPE_NORMAL sqrt.inc FALSE
 // Retrieval info: GEN_FILE: TYPE_NORMAL sqrt.cmp FALSE
 // Retrieval info: GEN_FILE: TYPE_NORMAL sqrt.bsf FALSE
-// Retrieval info: GEN_FILE: TYPE_NORMAL sqrt_inst.v TRUE
+// Retrieval info: GEN_FILE: TYPE_NORMAL sqrt_inst.v FALSE
 // Retrieval info: GEN_FILE: TYPE_NORMAL sqrt_bb.v TRUE
 // Retrieval info: LIB_FILE: altera_mf
