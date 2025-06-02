@@ -9,17 +9,17 @@
 
 /* ========== ESTRUTURAS DE DADOS ========== */
 struct Params {
-    const int8_t* a;
+    const uint8_t* a;
     const int8_t* b;
     uint32_t opcode;
-    uint32_t size;
+    uint32_t size; 
 };
 
 /* ========== DECLARAÇÕES DE FUNÇÕES ASSEMBLY ========== */
 extern int init_hw_access(void);
 extern int close_hw_access(void);
 extern int send_all_data(const struct Params* p);
-extern int read_all_results(int8_t* result);
+extern int read_all_results(uint8_t* result);
 
 /* ========== KERNELS DOS FILTROS DE BORDA ========== */
 
