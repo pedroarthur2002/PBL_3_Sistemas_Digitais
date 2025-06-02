@@ -101,8 +101,8 @@ void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint8
     
     // Determina o tamanho real da janela baseado no código de tamanho
     switch(filter_size) {
-        case 0: // Roberts 2x2
-            half_size = 0; // sem padding, pega 2x2 a partir do pixel atual
+        case 0:
+            half_size = 0; 
             break;
         case 1: // 3x3
             half_size = 1;
@@ -116,7 +116,7 @@ void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint8
     
     idx = 0;
     
-    if (filter_size == 0) { // Caso especial para Roberts 2x2
+    if (filter_size == 0) {  // Caso especial para Roberts 2x2
         for (i = 0; i < 2; i++) {
             for (j = 0; j < 2; j++) {
                 px = x + j;
@@ -136,7 +136,7 @@ void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint8
                 if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
                     window[idx] = (uint8_t)img[py][px];
                 } else {
-                    window[idx] = 0; // padding para bordas
+                    window[idx] = 0;
                 }
                 idx++;
             }
@@ -210,8 +210,6 @@ int main() {
         }
     }
     
-    printf("\n========= FILTRO DE BORDA COM STB_IMAGE =========\n");
-    
     // Carrega apenas a imagem.png
     printf("Carregando imagem.png...\n");
     if (resize_and_load_image("imagem.png", rgb) != 0) {
@@ -222,7 +220,6 @@ int main() {
     printf("Convertendo para escala de cinza...\n");
     rgb_to_grayscale(rgb, grayscale);
     save_grayscale_png("imagem_cinza.png", grayscale);
-    printf("Imagem em escala de cinza salva como 'imagem_cinza.png'\n");
     
     // Inicializa o hardware
     printf("Inicializando hardware...\n");

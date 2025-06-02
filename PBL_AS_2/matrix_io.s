@@ -39,17 +39,14 @@ init_hw_access:
     MOV r1, #2
     MOV r2, #0
     SVC 0
-
     CMP r0, #0
     BLT fail_open
-    
     @ --- Salva file descriptor ---
     LDR r1, =fd_mem
     str r0, [r1]
-    mov r4, r0              @guarda em r4
-
+    mov r4, r0              
     @ --- Mapeia memória ---
-    MOV r7, #192    @ mmap2
+    MOV r7, #192    
     MOV r0, #0
     LDR r1, =LW_BRIDGE_SPAN
     LDR r1, [r1]
@@ -86,25 +83,19 @@ end_init:
     POP {r1-r7, lr}
     BX lr
 
-@ int close_hw_access()
 @ Libera os recursos alocados por init_hw_access
-@ Retorna: 0 (HW_SUCCESS) em caso de sucesso, ou código de erro em caso de falha
 close_hw_access:
     PUSH {r4-r7, lr}
-    
     @ Verifica se o ponteiro mapeado é válido
     LDR r0, =data_in_ptr
     LDR r0, [r0]
     CMP r0, #0
-    BEQ skip_munmap    @ Se for NULL, pula o munmap
-    
+    BEQ skip_munmap    
     @ Desmapeia a memória
-    MOV r7, #91       @ syscall munmap
-    @ r0 já contém o ponteiro para o início da região mapeada
+    MOV r7, #91       
     LDR r1, =LW_BRIDGE_SPAN
-    LDR r1, [r1]      @ Tamanho do mapeamento
+    LDR r1, [r1]
     SVC 0
-    
     @ Limpa os ponteiros após o munmap
     MOV r4, #0
     LDR r5, =data_in_ptr
@@ -113,16 +104,13 @@ close_hw_access:
     STR r4, [r5]
     
 skip_munmap:
-    @ Verifica se o descritor de arquivo é válido
     LDR r0, =fd_mem
     LDR r0, [r0]
     CMP r0, #0
-    BLE skip_close    @ Se inválido, pula o close
-    
+    BLE skip_close
     @ Fecha o descritor de arquivo
-    MOV r7, #6        @ syscall close
+    MOV r7, #6 
     SVC 0
-    
     @ Limpa o descritor de arquivo
     MOV r4, #-1
     LDR r5, =fd_mem
@@ -134,72 +122,61 @@ skip_close:
     BX lr
 
 @ void send_all_data(*params)
-@ params = {int8_t* a, int8_t* b, uint32_t opcode, uint32_t size, uint32_t scalar}
 send_all_data:
     PUSH {r3-r11, lr}
-    
-    @ R0 = ponteiro para struct Params
     LDR r4, [r0]            @ a (pixel window)
     LDR r5, [r0, #4]        @ b (kernel Gx)
     LDR r6, [r0, #8]        @ opcode
     LDR r7, [r0, #12]       @ size
     LDR r8, [r0, #16]       @ c (kernel Gy)
-    
-    @ Envia pulso de reset e de start para o módulo da FPGA
+
     LDR r2, =data_in_ptr
-    LDR r2, [r2]            @ r2 = endereço base do registrador data_in
-    
+    LDR r2, [r2]       
     MOV r9, #1
     LSL r9, r9, #29
     MOV r0, r9              @ r0 = reset bit (bit 29 = 1)
-    STR r0, [r2]            @ escreve com reset bit ativo
+    STR r0, [r2]            
     MOV r0, #0
     STR r0, [r2]            @ limpa (pulso rápido)
-
-    @ --- Delay entre o sinal de reset e start          
+        
     MOV r11, #DELAY_CYCLES              
     BL delay_loop  
-    
     MOV r9, #1
     LSL r9, r9, #30
     MOV r0, r9              @ r0 = start bit (bit 30 = 1)
-    STR r0, [r2]            @ escreve com start bit ativo
+    STR r0, [r2]            
     MOV r0, #0
     STR r0, [r2]            @ limpa (pulso rápido)
-    
-    @ Inicializa contadores
+
     MOV r9, #25             @ número máximo de elementos (5x5)
     MOV r10, #0             @ índice = 0
 
 loop_send:
     CMP r10, r9
-    BGE end_send            @ sai do loop se índice >= 25
-    
-    @ Carrega valores das matrizes
+    BGE end_send            
     LDRB r0, [r4, r10]      @ r0 = pixel (sem sinal)
-    LDRSB r1, [r5, r10]     @ r1 = kernel Gx (com sinal)
-    LDRSB r3, [r8, r10]     @ r3 = kernel Gy (com sinal)
+    LDRSB r1, [r5, r10]     @ r1 = kernel Gx
+    LDRSB r3, [r8, r10]     @ r3 = kernel Gy
 
     AND r0, r0, #0xFF       @ Pixel [7:0]
     AND r1, r1, #0xFF       @ Kernel Gx [7:0]
     AND r3, r3, #0xFF       @ Kernel Gy [7:0]
     
     @ Empacota: [31] | [30:29] size | [28:21] Gy | [20:16] opcode | [15:8] Gx | [7:0] pixel
-    LSL r3, r3, #21         @ Gy para posição [28:21]
-    LSL r1, r1, #8          @ Gx para posição [15:8]
-    ORR r0, r0, r1          @ Combina pixel + Gx
-    ORR r0, r0, r3          @ Adiciona Gy
-    ORR r0, r0, r6, LSL #16 @ Adiciona opcode [20:16]
-    ORR r0, r0, r7, LSL #29 @ Adiciona size [30:29]
+    LSL r3, r3, #21         
+    LSL r1, r1, #8          
+    ORR r0, r0, r1         
+    ORR r0, r0, r3          
+    ORR r0, r0, r6, LSL #16 
+    ORR r0, r0, r7, LSL #29 
     
-    PUSH {r0}               @ Salva o valor de r0 antes da chamada da função
-    MOV r1, #1              @ sinaliza tipo de envio (1 = dado normal)
-    BL handshake_send       @ envia com handshake
-    POP {r0}                @ Recupera o valor de r0 após a função
-    
+    PUSH {r0}              
+    MOV r1, #1              
+    BL handshake_send       
+    POP {r0}                
     ADD r10, r10, #1
     B loop_send
-    
+
 end_send:
     MOV r0, #0              @ Retorna sucesso
     POP {r3-r11, lr}
@@ -211,127 +188,93 @@ delay_loop:
     BX lr
 
 @ int read_all_results(int8_t* result)
-@ Retorna HW_SUCCESS (0) se bem-sucedido ou HW_ERROR (1) se falhar
 read_all_results:
     PUSH {r4-r7, lr}
-    MOV r4, r0           @ r4 = result (ponteiro para armazenar matriz)
-    MOV r6, #25          @ número de elementos na matriz
-    MOV r7, #0           @ índice inicial
+    MOV r4, r0           
+    MOV r6, #25         
+    MOV r7, #0         
 
 .loop_recv:
     CMP r7, r6
-    BGE .done            @ Se já lemos todos elementos, terminamos
-    
+    BGE .done           
     MOV r0, r4
-    ADD r0, r0, r7       @ r0 = &result[i] (endereço onde armazenar o próximo elemento)
-    BL handshake_receive @ Chama a função para receber um elemento da FPGA
-    
-    CMP r0, #0           @ Verifica se handshake_receive teve sucesso
-    BNE .error           @ Se falhou, sai com erro
-    
-    ADD r7, r7, #1       @ Incrementa o índice
-    B .loop_recv         @ Continua o loop
-
+    ADD r0, r0, r7       
+    BL handshake_receive 
+    CMP r0, #0           
+    BNE .error          
+    ADD r7, r7, #1       
+    B .loop_recv         
 .error:
-    MOV r0, #1           @ Código de erro (HW_ERROR = 1)
+    MOV r0, #1           
     B .exit
-
 .done:
-    MOV r0, #0           @ Código de sucesso (HW_SUCCESS = 0)
-
+    MOV r0, #0          
 .exit:
     POP {r4-r7, lr}
-    BX lr                @ Retorna para o chamador
+    BX lr               
 
 @ void handshake_send(uint32_t value)
-@ Entrada:
-@   r0 = valor a ser enviado
 handshake_send:
     PUSH {r1-r4, lr}
-
     @ r0 = valor original
-    @ Lê ponteiro para data_in
     LDR r1, =data_in_ptr
-    LDR r1, [r1]          @ r1 = endereço data_in
-
+    LDR r1, [r1]          
     @ Lê ponteiro para data_out
     LDR r2, =data_out_ptr
-    LDR r2, [r2]          @ r2 = endereço data_out
-
+    LDR r2, [r2]       
     @ --- Etapa 1: Escreve valor com bit 31 ligado ---
-    ORR r3, r0, #(1 << 31)     @ r3 = valor | HPS_CONTROL_BIT
-    STR r3, [r1]               @ escreve no registrador data_in
-
+    ORR r3, r0, #(1 << 31)     
+    STR r3, [r1]               
     @ --- Etapa 2: Espera FPGA_ACK = 1 ---
 .wait_ack_high_send:
-    LDR r4, [r2]               @ lê data_out
-    TST r4, #(1 << 31)         @ testa bit 31
-    BEQ .wait_ack_high_send         @ se 0, continua esperando
-
+    LDR r4, [r2]               
+    TST r4, #(1 << 31)         
+    BEQ .wait_ack_high_send
     @ --- Etapa 3: Confirma recebimento → escreve 0 ---
     MOV r3, #0
-    STR r3, [r1]               @ limpa controle
-
+    STR r3, [r1]               
     @ --- Etapa 4: Espera FPGA_ACK = 0 ---
 .wait_ack_low_send:
     LDR r4, [r2]
     TST r4, #(1 << 31)
-    BNE .wait_ack_low_send          @ se ainda 1, espera
-
-    @ --- Fim ---
+    BNE .wait_ack_low_send
     POP {r1-r4, lr}
     BX lr
 
 @ int handshake_receive(uint8_t* value_out)
-@ Entrada:
-@ r0 = ponteiro para armazenar valor de matriz
-@ Saída:
-@ r0 = código de status (0 = sucesso, 1 = erro)
 handshake_receive:
     PUSH {r2-r5, lr}
-    
-    @ Carrega endereços dos registradores de interface com a FPGA
-    LDR r2, =data_in_ptr     @ r2 = ponteiro para registrador de entrada (HPS->FPGA)
+    LDR r2, =data_in_ptr     
     LDR r2, [r2]
-    LDR r3, =data_out_ptr    @ r3 = ponteiro para registrador de saída (FPGA->HPS)
+    LDR r3, =data_out_ptr  
     LDR r3, [r3]
-    
-    @ Verifica se os ponteiros são válidos
     CMP r2, #0
-    BEQ .handshake_error     @ Erro se data_in_ptr for NULL
+    BEQ .handshake_error     
     CMP r3, #0
-    BEQ .handshake_error     @ Erro se data_out_ptr for NULL
-    
+    BEQ .handshake_error     
     @ Envia sinal de pronto para FPGA
-    MOV r4, #(1 << 31)       @ Bit 31 = 1 (HPS está pronto)
-    STR r4, [r2]             @ HPS_CONTROL = 1 (bit 31)
-    
+    MOV r4, #(1 << 31)       
+    STR r4, [r2]     
     @ Aguarda FPGA sinalizar que enviou dados (bit 31=1 em data_out)
 .wait_ack_high_recei:
-    LDR r5, [r3]             @ Lê o registrador da FPGA
+    LDR r5, [r3]             
     TST r5, #(1 << 31)       @ Testa se bit 31 está ativo
-    BEQ .wait_ack_high_recei @ Continua esperando se não estiver
-    
+    BEQ .wait_ack_high_recei 
     @ Extrai o valor da matriz (bits [7:0])
-    AND r4, r5, #0xFF        @ Isola os 8 bits menos significativos
-    STRB r4, [r0]            @ Armazena no ponteiro value_out
-    
+    AND r4, r5, #0xFF        
+    STRB r4, [r0]            
     @ Confirma a leitura desativando o bit de controle
     MOV r4, #0
-    STR r4, [r2]             @ HPS_CONTROL = 0
-    
+    STR r4, [r2]            
     @ Aguarda FPGA desativar seu sinal de pronto
 .wait_ack_low_recei:
     LDR r5, [r3]
     TST r5, #(1 << 31)
-    BNE .wait_ack_low_recei  @ Continua esperando enquanto bit 31=1
-    
-    MOV r0, #0               @ Retorna sucesso
+    BNE .wait_ack_low_recei
+    MOV r0, #0               
     B .handshake_exit
-    
 .handshake_error:
-    MOV r0, #1               @ Retorna erro
-
+    MOV r0, #1               
 .handshake_exit:
     POP {r2-r5, lr}
     BX lr
