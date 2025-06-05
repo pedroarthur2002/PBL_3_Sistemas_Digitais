@@ -11,10 +11,10 @@ data_in_ptr: .word 0         @ ponteiro para base do data_in
 .global data_out_ptr
 data_out_ptr: .word 0       @ ponteiro para base do data_out
 
-.global fd_mem
+.global fd_mem 
 fd_mem: .space 4              @ file descriptor do open()
 
-.section .text
+.section .text  
 
 @ Definicao de funcoes
 .global init_hw_access
@@ -39,14 +39,17 @@ init_hw_access:
     MOV r1, #2
     MOV r2, #0
     SVC 0
+
     CMP r0, #0
     BLT fail_open
+    
     @ --- Salva file descriptor ---
     LDR r1, =fd_mem
     str r0, [r1]
-    mov r4, r0              
+    mov r4, r0              @guarda em r4
+
     @ --- Mapeia memória ---
-    MOV r7, #192    
+    MOV r7, #192    @ mmap2
     MOV r0, #0
     LDR r1, =LW_BRIDGE_SPAN
     LDR r1, [r1]
@@ -90,11 +93,11 @@ close_hw_access:
     LDR r0, =data_in_ptr
     LDR r0, [r0]
     CMP r0, #0
-    BEQ skip_munmap    
+    BEQ skip_munmap   
     @ Desmapeia a memória
-    MOV r7, #91       
+    MOV r7, #91     
     LDR r1, =LW_BRIDGE_SPAN
-    LDR r1, [r1]
+    LDR r1, [r1]      
     SVC 0
     @ Limpa os ponteiros após o munmap
     MOV r4, #0
@@ -102,28 +105,29 @@ close_hw_access:
     STR r4, [r5]
     LDR r5, =data_out_ptr
     STR r4, [r5]
-    
+
 skip_munmap:
+    @ Verifica se o descritor de arquivo é válido
     LDR r0, =fd_mem
     LDR r0, [r0]
     CMP r0, #0
-    BLE skip_close
+    BLE skip_close   
     @ Fecha o descritor de arquivo
-    MOV r7, #6 
+    MOV r7, #6        
     SVC 0
     @ Limpa o descritor de arquivo
     MOV r4, #-1
     LDR r5, =fd_mem
     STR r4, [r5]
-    
+
 skip_close:
-    MOV r0, #0        @ Retorna HW_SUCCESS
+    MOV r0, #0       
     POP {r4-r7, lr}
     BX lr
 
 @ void send_all_data(*params)
 send_all_data:
-    PUSH {r3-r11, lr}
+    PUSH {r3-r12, lr}
     LDR r4, [r0]            @ a (pixel window)
     LDR r5, [r0, #4]        @ b (kernel Gx)
     LDR r6, [r0, #8]        @ opcode
@@ -131,7 +135,8 @@ send_all_data:
     LDR r8, [r0, #16]       @ c (kernel Gy)
 
     LDR r2, =data_in_ptr
-    LDR r2, [r2]       
+    LDR r2, [r2] 
+
     MOV r9, #1
     LSL r9, r9, #29
     MOV r0, r9              @ r0 = reset bit (bit 29 = 1)
@@ -140,7 +145,8 @@ send_all_data:
     STR r0, [r2]            @ limpa (pulso rápido)
         
     MOV r11, #DELAY_CYCLES              
-    BL delay_loop  
+    BL delay_loop
+
     MOV r9, #1
     LSL r9, r9, #30
     MOV r0, r9              @ r0 = start bit (bit 30 = 1)
@@ -154,21 +160,20 @@ send_all_data:
 loop_send:
     CMP r10, r9
     BGE end_send            
-    LDRB r0, [r4, r10]      @ r0 = pixel (sem sinal)
+    LDRB r0,  [r4, r10]     @ r0 = pixel (sem sinal)
     LDRSB r1, [r5, r10]     @ r1 = kernel Gx
-    LDRSB r3, [r8, r10]     @ r3 = kernel Gy
+    LDRSB r12, [r8, r10]    @ r3 = kernel Gy
 
     AND r0, r0, #0xFF       @ Pixel [7:0]
     AND r1, r1, #0xFF       @ Kernel Gx [7:0]
-    AND r3, r3, #0xFF       @ Kernel Gy [7:0]
+    AND r12, r12, #0xFF     @ Kernel Gy [7:0]
     
-    @ Empacota: [31] | [30:29] size | [28:21] Gy | [20:16] opcode | [15:8] Gx | [7:0] pixel
-    LSL r3, r3, #21         
-    LSL r1, r1, #8          
-    ORR r0, r0, r1         
-    ORR r0, r0, r3          
-    ORR r0, r0, r6, LSL #16 
-    ORR r0, r0, r7, LSL #29 
+    @ Empacota: [31]  | [28:21] Gy | [20:19] size | [18:16] opcode | [15:8] Gx | [7:0] pixel        
+    LSL r1, r1, #8           
+    ORR r0, r0, r1  
+    ORR r0, r0, r6, LSL #16
+    ORR r0, r0, r7, LSL #19  
+    ORR r0, r0, r12,LSL #21 
     
     PUSH {r0}              
     MOV r1, #1              
@@ -179,7 +184,7 @@ loop_send:
 
 end_send:
     MOV r0, #0              @ Retorna sucesso
-    POP {r3-r11, lr}
+    POP {r3-r12, lr}
     BX lr
 
 delay_loop:
@@ -187,7 +192,7 @@ delay_loop:
     BNE delay_loop
     BX lr
 
-@ int read_all_results(int8_t* result)
+@ int read_all_results(uint8_t* result)
 read_all_results:
     PUSH {r4-r7, lr}
     MOV r4, r0           

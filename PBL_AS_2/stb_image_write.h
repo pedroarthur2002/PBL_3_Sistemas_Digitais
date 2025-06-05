@@ -12,7 +12,7 @@
 
 ABOUT:
 
-   This header file is a library for writing images to C stdio or a callback.
+   This header file is a library for writing images to C stdio or a callback. 
 
    The PNG output is not optimal; it is 20-50% larger than the file
    written by a decent optimizing implementation; though providing a custom

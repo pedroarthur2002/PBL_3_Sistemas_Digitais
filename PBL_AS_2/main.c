@@ -15,9 +15,14 @@
 #define WIDTH 320
 #define HEIGHT 240
 
+// Aumentar precisão - usar uint8_t para janelas e int16_t para resultados
+typedef uint8_t pixel_t;
+typedef int16_t result_t;
 // Variável global para armazenar a imagem em escala de cinza
 unsigned char grayscale[HEIGHT][WIDTH];
 static int8_t kernel_zero[MATRIX_SIZE] = {0};
+// Variável global para a janela - sempre 5x5 (25 elementos)
+pixel_t window[MATRIX_SIZE];
 
 // Função para redimensionar e carregar imagem usando STB Image
 int resize_and_load_image(const char* filename, unsigned char rgb[HEIGHT][WIDTH][3]) {
@@ -75,7 +80,6 @@ void save_grayscale_png(const char* filename, unsigned char gray[HEIGHT][WIDTH])
     }
 }
 
-
 // Converte RGB para grayscale
 void rgb_to_grayscale(unsigned char rgb[HEIGHT][WIDTH][3], unsigned char gray[HEIGHT][WIDTH]) {
     int y, x;
@@ -89,101 +93,123 @@ void rgb_to_grayscale(unsigned char rgb[HEIGHT][WIDTH][3], unsigned char gray[HE
     }
 }
 
-// Extrai janela NxN ao redor do pixel (x,y) e lineariza em vetor
-void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint8_t window[MATRIX_SIZE], int filter_size) {
-    int i, j, idx, px, py;
-    int half_size;
+// Função de extração de janela corrigida
+void extract_window_linear(unsigned char img[HEIGHT][WIDTH], int x, int y, uint32_t size_code) {
+    int i, j, idx;
+    int px, py;
     
-    // Inicializa todo o vetor com zeros
-    for (i = 0; i < MATRIX_SIZE; i++) {
-        window[i] = 0;
-    }
+    // Zera toda a janela 5x5
+    memset(window, 0, MATRIX_SIZE * sizeof(pixel_t));
     
-    // Determina o tamanho real da janela baseado no código de tamanho
-    switch(filter_size) {
-        case 0:
-            half_size = 0; 
-            break;
-        case 1: // 3x3
-            half_size = 1;
-            break;
-        case 3: // 5x5
-            half_size = 2;
-            break;
-        default:
-            half_size = 1;
-    }
-    
-    idx = 0;
-    
-    if (filter_size == 0) {  // Caso especial para Roberts 2x2
+    if (size_code == 0) {
+        // Caso especial para Roberts 2x2
         for (i = 0; i < 2; i++) {
             for (j = 0; j < 2; j++) {
                 px = x + j;
                 py = y + i;
-                if (px < WIDTH && py < HEIGHT) {
-                    window[idx] = (uint8_t)img[py][px];
+                
+                // Posiciona a janela 2x2 no centro da matriz 5x5
+                int row_in_5x5 = i; 
+                int col_in_5x5 = j; 
+                idx = row_in_5x5 * 5 + col_in_5x5;
+                
+                if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+                    window[idx] = (pixel_t)img[py][px];
+                } else {
+                    window[idx] = 0; // padding para bordas
                 }
-                idx++;
             }
         }
     } else {
-        // Para filtros 3x3 e 5x5
+        // Caso geral para janelas 3x3 e 5x5
+        int window_size;
+        switch(size_code) {
+            case 1: window_size = 3; break; // Sobel/Prewitt 3x3
+            case 3: window_size = 5; break; // Sobel 5x5/Laplaciano 5x5
+            default: window_size = 3; break;
+        }
+        
+        int half_size = window_size / 2;
+        
+        // Extrai janela centralizada
         for (i = -half_size; i <= half_size; i++) {
             for (j = -half_size; j <= half_size; j++) {
                 px = x + j;
                 py = y + i;
+                
+                // Calcula o índice na matriz 5x5
+                int row_in_5x5 = i + 2; 
+                int col_in_5x5 = j + 2; 
+                idx = row_in_5x5 * 5 + col_in_5x5;
+                
                 if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
-                    window[idx] = (uint8_t)img[py][px];
+                    window[idx] = (pixel_t)img[py][px];
                 } else {
-                    window[idx] = 0;
+                    window[idx] = 0; // padding para bordas
                 }
-                idx++;
             }
         }
     }
 }
 
-// Calcula a convolução usando a FPGA - CORRIGIDA
-int compute_convolution(uint8_t* image_window, int8_t* filter_kernel_gx, int8_t* filter_kernel_gy, uint32_t size_code) {
-    uint8_t result[MATRIX_SIZE];
+// Calcula a convolução usando a FPGA
+int compute_convolution(pixel_t* image_window, int8_t* filter_kernel_gx, int8_t* filter_kernel_gy, uint32_t size_code) {
+    pixel_t result[MATRIX_SIZE];
     int i;
    
-    struct Params params = {
-        .a = image_window,
-        .b = filter_kernel_gx,
-        .opcode = 7,
-        .size = size_code,
-        .c = filter_kernel_gx
-    };
-   
-    if (send_all_data(&params) != HW_SUCCESS) {
-        fprintf(stderr, "Falha no envio de dados para a FPGA\n");
-        return 0;
+    if (size_code == 5){
+        struct Params params = {
+            .a = image_window,
+            .b = filter_kernel_gx,
+            .opcode = 6,
+            .size = size_code,
+            .c = filter_kernel_gy
+        };
+    
+        if (send_all_data(&params) != HW_SUCCESS) {
+            fprintf(stderr, "Falha no envio de dados para a FPGA\n");
+            return 0;
+        }
+        if (read_all_results(result) != HW_SUCCESS) {
+            fprintf(stderr, "Falha na leitura dos resultados da FPGA\n");
+            return 0;
+        }
+    } else{
+        struct Params params = {
+            .a = image_window,
+            .b = filter_kernel_gx,
+            .opcode = 7,
+            .size = size_code,
+            .c = filter_kernel_gy
+        };
+    
+        if (send_all_data(&params) != HW_SUCCESS) {
+            fprintf(stderr, "Falha no envio de dados para a FPGA\n");
+            return 0;
+        }
+        if (read_all_results(result) != HW_SUCCESS) {
+            fprintf(stderr, "Falha na leitura dos resultados da FPGA\n");
+            return 0;
+        }
     }
-   
-    if (read_all_results(result) != HW_SUCCESS) {
-        fprintf(stderr, "Falha na leitura dos resultados da FPGA\n");
-        return 0;
-    }
-    return (int)result[0]; 
- }
+    
+    return result[0]; 
+}
 
-// Calcula a imagem com o filtro de borda selecionado - CORRIGIDA
+// Calcula a imagem com o filtro de borda selecionado
 void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, unsigned char result[HEIGHT][WIDTH]) {
     int x, y;
-    uint8_t window[MATRIX_SIZE];
-    
-    printf("Processando imagem com filtro de borda (gradiente completo)...\n");
     
     for (y = 0; y < HEIGHT; y++) {
         if (y % 40 == 0) printf("Processando linha %d/%d\n", y, HEIGHT);
         
         for (x = 0; x < WIDTH; x++) {
-            extract_window_linear(grayscale, x, y, window, size_code);
+            extract_window_linear(grayscale, x, y, size_code);
             result[y][x] = compute_convolution(window, filter_gx, filter_gy, size_code);
         }
+    
     }
+    
     printf("Filtro de gradiente aplicado com sucesso!\n");
 }
 
@@ -223,7 +249,7 @@ int main() {
     
     // Inicializa o hardware
     printf("Inicializando hardware...\n");
-    if (init_hw_access() != HW_SUCCESS) {
+    if (init_hw_access() != HW_SUCCESS) { 
         fprintf(stderr, "Falha na inicialização do hardware\n");
         return EXIT_FAILURE;
     }
@@ -284,7 +310,7 @@ int main() {
                 
             case 5:
                 printf("\nAplicando filtro Laplaciano 5x5...\n");
-                operation_filter(laplaciano_5x5, kernel_zero, 3, filter_result);
+                operation_filter(laplaciano_5x5, kernel_zero, selection, filter_result);
                 sprintf(output, "laplaciano_5x5_output.png");
                 break;
                 

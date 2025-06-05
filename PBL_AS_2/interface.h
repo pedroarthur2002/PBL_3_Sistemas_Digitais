@@ -5,7 +5,7 @@
 /* ========== CONSTANTES DE STATUS ========== */
 #define MATRIX_SIZE 25
 #define HW_SUCCESS      0
-#define HW_SEND_FAIL   -1
+#define HW_SEND_FAIL   -1 
 
 /* ========== ESTRUTURAS DE DADOS ========== */
 struct Params {
