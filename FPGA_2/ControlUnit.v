@@ -1,7 +1,7 @@
 	module ControlUnit (
 	input  wire        clk,
 	input  wire [31:0] data_in,   // HPS -> FPGA (0x0 - 0xf)
-	output reg  [31:0] data_out    // FPGA -> HPS (0x10 - 0x1f)	
+	output reg  [31:0] data_out    // FPGA -> HPS (0x10 - 0x1f)
 	);
 
 	// Estados da FSM
@@ -147,5 +147,6 @@
 		.result_final(matrix_out),
 		.process_Done(done_signal)
 	);
+	
 
 endmodule
