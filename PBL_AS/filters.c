@@ -1,11 +1,10 @@
-#include "interface.h"
-
+#include "interface.h" 
 /* ========== DEFINIÇÕES DOS KERNELS DOS FILTROS ========== */
 
 // SOBEL 3x3 - Gradiente X
 // Kernel original:
 // -1,  0,  1
-// -2,  0,  2  
+// -2,  0,  2   
 // -1,  0,  1
 // Posicionado no centro da matriz 5x5 
 int8_t sobel_gx_3x3[MATRIX_SIZE] = {
@@ -31,20 +30,20 @@ int8_t sobel_gy_3x3[MATRIX_SIZE] = {
 
 // SOBEL 5x5 - Gradiente X (versão expandida)
 int8_t sobel_gx_5x5[MATRIX_SIZE] = {
-    -2, -1,  0,  1,  2,   // linha 0
-    -3, -2,  0,  2,  3,   // linha 1
-    -4, -3,  0,  3,  4,   // linha 2
-    -3, -2,  0,  2,  3,   // linha 3
-    -2, -1,  0,  1,  2    // linha 4
+     2,  2,  4,  2,  2,   // linha 0
+     1,  1,  2,  1,  1,   // linha 1
+     0,  0,  0,  0,  0,   // linha 2
+    -1, -1, -2, -1, -1,   // linha 3
+    -2, -2, -4, -2, -2    // linha 4
 };
 
 // SOBEL 5x5 - Gradiente Y (versão expandida)
 int8_t sobel_gy_5x5[MATRIX_SIZE] = {
-    -2, -3, -4, -3, -2,   // linha 0
-    -1, -2, -3, -2, -1,   // linha 1
-     0,  0,  0,  0,  0,   // linha 2
-     1,  2,  3,  2,  1,   // linha 3
-     2,  3,  4,  3,  2    // linha 4
+     2,  1,  0, -1, -2,   // linha 0
+     2,  1,  0, -1, -2,   // linha 1
+     4,  2,  0, -2, -4,   // linha 2
+     2,  1,  0, -1, -2,   // linha 3
+     2,  1,  0, -1, -2,   // linha 4
 };
 
 // PREWITT 3x3 - Gradiente X

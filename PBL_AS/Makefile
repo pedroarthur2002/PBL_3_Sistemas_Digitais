@@ -19,7 +19,7 @@ $(TARGET): $(S_FILE).o $(C_FILE).o $(FILTERS_FILE).o
 	gcc -o $(TARGET) $(S_FILE).o $(C_FILE).o $(FILTERS_FILE).o -lm
 
 run: $(TARGET)
-	./$(TARGET)
+	./$(TARGET)  
 
 clean:
 	rm -f *.o $(TARGET)

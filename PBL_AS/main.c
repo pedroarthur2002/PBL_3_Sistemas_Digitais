@@ -160,7 +160,7 @@ int compute_convolution(pixel_t* image_window, int8_t* filter_kernel, uint32_t s
         .a = image_window,  
         .b = filter_kernel,
         .opcode = 7,
-        .size = size_code
+        .size = 3
     };
     
     if (send_all_data(&params) != HW_SUCCESS) {
@@ -177,46 +177,24 @@ int compute_convolution(pixel_t* image_window, int8_t* filter_kernel, uint32_t s
     return result_final;
 }
 
-// Função de normalização adaptativa por tipo de filtro
-unsigned char normalize_pixel_adaptive(result_t value, result_t min_val, result_t max_val, int filter_type) {
-    result_t normalized;
-    
-    if (max_val == min_val) return 128; // valor médio se não há variação
-    
-    switch(filter_type) {
-        case 4: // Roberts - mais sensível, amplia pequenas variações
-            normalized = ((value - min_val) * 300) / (max_val - min_val);
-            if (normalized > 255) normalized = 255;
-            break;
-            
-        case 5: // Laplaciano - destaca zeros-crossing
-            // Para Laplaciano, valores próximos de zero são bordas
-            normalized = (abs(value) * 255) / max_val;
-            break;
-            
-        default: // Sobel, Prewitt - normalização padrão
-            normalized = ((value - min_val) * 255) / (max_val - min_val);
-    }
-    
-    if (normalized < 0) return 0;
-    if (normalized > 255) return 0;
-    return (unsigned char)normalized;
+// Função simples de saturação - clamp para faixa 0-255
+unsigned char saturate_pixel(result_t value) {
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return (unsigned char)value;
 }
 
 void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, unsigned char result[HEIGHT][WIDTH]) {
     static result_t gx_buffer[HEIGHT][WIDTH];
     static result_t gy_buffer[HEIGHT][WIDTH];
-    static result_t magnitude_buffer[HEIGHT][WIDTH];
     
     int x, y;
-    result_t min_val, max_val;
     
     printf("Processando imagem com filtro de borda...\n");
     
     // Inicializa buffers
     memset(gx_buffer, 0, sizeof(gx_buffer));
     memset(gy_buffer, 0, sizeof(gy_buffer));
-    memset(magnitude_buffer, 0, sizeof(magnitude_buffer));
     
     // Fase 1: Calcula gradiente Gx
     printf("Calculando gradiente Gx...\n");
@@ -241,57 +219,35 @@ void operation_filter(int8_t* filter_gx, int8_t* filter_gy, uint32_t size_code, 
             }
         }
         
-        // Fase 3: Calcula magnitude
+        // Fase 3: Calcula magnitude e aplica saturação direta
         printf("Calculando magnitude...\n");
-        min_val = INT16_MAX;
-        max_val = INT16_MIN;
-        
         for (y = 0; y < HEIGHT; y++) {
             for (x = 0; x < WIDTH; x++) {
                 result_t gx = gx_buffer[y][x];
                 result_t gy = gy_buffer[y][x];
                 
-                // Magnitude euclidiana otimizada
-                magnitude_buffer[y][x] = (result_t)sqrt((double)(gx * gx + gy * gy));
+                // Magnitude euclidiana
+                result_t magnitude = (result_t)sqrt((double)(gx * gx + gy * gy));
                 
-                if (magnitude_buffer[y][x] < min_val) min_val = magnitude_buffer[y][x];
-                if (magnitude_buffer[y][x] > max_val) max_val = magnitude_buffer[y][x];
-            }
-        }
-        
-        // Normalização final com tipo de filtro
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                result[y][x] = normalize_pixel_adaptive(magnitude_buffer[y][x], min_val, max_val, size_code);
+                // Saturação direta
+                result[y][x] = saturate_pixel(magnitude);
             }
         }
         
     } else {
         // Caso filtro unidirecional (Laplaciano)
         printf("Processando filtro unidirecional...\n");
-        min_val = INT16_MAX;
-        max_val = INT16_MIN;
-        
         for (y = 0; y < HEIGHT; y++) {
             for (x = 0; x < WIDTH; x++) {
-                magnitude_buffer[y][x] = gx_buffer[y][x]; // sem valor absoluto para Laplaciano
-                
-                if (magnitude_buffer[y][x] < min_val) min_val = magnitude_buffer[y][x];
-                if (magnitude_buffer[y][x] > max_val) max_val = magnitude_buffer[y][x];
-            }
-        }
-        
-        // Normalização especial para Laplaciano
-        for (y = 0; y < HEIGHT; y++) {
-            for (x = 0; x < WIDTH; x++) {
-                result[y][x] = normalize_pixel_adaptive(magnitude_buffer[y][x], min_val, max_val, 5);
+                // Para Laplaciano, usar valor absoluto e saturar
+                result_t abs_value = abs(gx_buffer[y][x]);
+                result[y][x] = saturate_pixel(abs_value);
             }
         }
     }
     
-    printf("Filtro aplicado! Min: %ld, Max: %ld\n", (long)min_val, (long)max_val);
+    printf("Filtro aplicado com saturação simples!\n");
 }
-
 
 int validate_operation(uint32_t selection) {
     if (selection < 1 || selection > 6) {
