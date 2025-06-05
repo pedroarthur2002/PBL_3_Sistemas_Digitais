@@ -232,7 +232,8 @@ assign stm_hw_events    = {{3{1'b0}},SW, fpga_led_internal, fpga_debounced_butto
 ControlUnit contronunit_inst (
 	.clk(CLOCK_50),
 	.data_in(DATA_IN),
-	.data_out(DATA_OUT)
+	.data_out(DATA_OUT),
+	.Leds(LEDR[3:0])
 );
 
 soc_system u0 (

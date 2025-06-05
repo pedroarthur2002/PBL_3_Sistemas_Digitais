@@ -1,7 +1,8 @@
 	module ControlUnit (
 	input  wire        clk,
 	input  wire [31:0] data_in,   // HPS -> FPGA (0x0 - 0xf)
-	output reg  [31:0] data_out    // FPGA -> HPS (0x10 - 0x1f)	
+	output reg  [31:0] data_out,    // FPGA -> HPS (0x10 - 0x1f)
+	output reg [3:0] Leds
 	);
 
 	// Estados da FSM
@@ -26,7 +27,6 @@
 	// Matrizes internas
 	reg [7:0] matrix_a [0:24];
 	reg signed [7:0] matrix_b [0:24];
-	reg signed [7:0] matrix_c [0:24];
 	reg signed [7:0] matrix_result [0:24];
 
 	// Interface com coprocessador
@@ -39,7 +39,6 @@
 	wire [7:0]  val_b     = data_in[15:8];
 	wire [2:0]  opcode_in = data_in[18:16];
 	wire [1:0]  size_in   = data_in[20:19];
-	wire [7:0]  val_c		 = data_in[28:21];
 	wire 			reset     = data_in[29];
 	wire        start_in  = data_in[30];
 
@@ -85,7 +84,6 @@
 						matrix_size <= size_in;
 						matrix_a[index] <= val_a;
 						matrix_b[index] <= val_b;
-						matrix_c[index] <= val_c;
 						index <= index + 1;
 						if (index == 24) begin
 							index       <= 0;
@@ -133,7 +131,6 @@
 		for (j = 0; j < 25; j = j + 1) begin : matrix_flatten
 			assign matrix_a_flat[(j*8) +: 8] = matrix_a[j];
 			assign matrix_b_flat[(j*8) +: 8] = matrix_b[j];
-			assign matrix_c_flat[(j*8) +: 8] = matrix_c[j];
 		end
 	endgenerate
 
@@ -146,5 +143,15 @@
 		.result_final(matrix_out),
 		.process_Done(done_signal)
 	);
+	
+	always @(*) begin
+		 case (state)
+			  IDLE:       Leds = 4'b0001;
+			  RECEIVING:  Leds = 4'b0010;
+			  PROCESSING: Leds = 4'b0100;
+			  SENDING:    Leds = 4'b1000;
+			  default:    Leds = 4'b0001;
+		 endcase
+	end
 
 endmodule
