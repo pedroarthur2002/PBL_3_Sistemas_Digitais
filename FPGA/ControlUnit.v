@@ -1,8 +1,7 @@
 	module ControlUnit (
 	input  wire        clk,
 	input  wire [31:0] data_in,   // HPS -> FPGA (0x0 - 0xf)
-	output reg  [31:0] data_out,    // FPGA -> HPS (0x10 - 0x1f)
-	output reg [3:0] Leds
+	output reg  [31:0] data_out    // FPGA -> HPS (0x10 - 0x1f)
 	);
 
 	// Estados da FSM
@@ -143,15 +142,5 @@
 		.result_final(matrix_out),
 		.process_Done(done_signal)
 	);
-	
-	always @(*) begin
-		 case (state)
-			  IDLE:       Leds = 4'b0001;
-			  RECEIVING:  Leds = 4'b0010;
-			  PROCESSING: Leds = 4'b0100;
-			  SENDING:    Leds = 4'b1000;
-			  default:    Leds = 4'b0001;
-		 endcase
-	end
 
 endmodule
