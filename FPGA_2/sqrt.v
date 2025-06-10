@@ -1,4 +1,4 @@
-module sqrt (
+	module sqrt (
     input  wire [31:0] in,
     output reg  [15:0] out  // Raiz de 32 bits cabe em 16 bits
 );

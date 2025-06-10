@@ -1,11 +1,10 @@
-// Módulo de convolução otimizado
+// Módulo de convolução otimizado com debug melhorado
 module ConvolutionModule (
     input [199:0] matrix_a,     // Pixels da região (valores unsigned 0-255)
     input [199:0] matrix_b,     // Kernel/filtro (valores signed, podem ser negativos)
     input [1:0] matrix_size,    // 00=2x2, 01=3x3, 10=4x4, 11=5x5
     output reg signed [15:0] result_out
 );
-
     // Função para extrair pixel (unsigned)
     function [7:0] get_pixel;
         input [199:0] matrix;
@@ -49,18 +48,19 @@ module ConvolutionModule (
         end
     endfunction
 
-    // Função de convolução otimizada
+    // Função de convolução otimizada com melhor tratamento de overflow
     function signed [15:0] optimized_convolution;
         input [199:0] pixels;
         input [199:0] kernel;
         input [1:0] size;
-        reg signed [19:0] sum; // Aumentado para evitar overflow
+        reg signed [20:0] sum; 
         reg [7:0] pixel_val;
         reg signed [7:0] kernel_val;
+        reg signed [15:0] mult_result;
         reg [2:0] row, col;
         reg [4:0] idx;
         begin
-            sum = 20'sb0;
+            sum = 21'sb0;
             
             // Loop otimizado através das posições válidas
             for (row = 0; row < 5; row = row + 1) begin
@@ -71,15 +71,16 @@ module ConvolutionModule (
                         kernel_val = get_kernel(kernel, idx);
                         
                         // Multiplica pixel unsigned por kernel signed
-                        sum = sum + ($signed({1'b0, pixel_val}) * kernel_val);
+                        mult_result = $signed({1'b0, pixel_val}) * kernel_val;
+                        sum = sum + mult_result;
                     end
                 end
             end
             
-            // Saturação na saída
-            if (sum > 20'sd32767) 
+            // Saturação melhorada na saída
+            if (sum > 21'sd32767) 
                 optimized_convolution = 16'sd32767;
-            else if (sum < -20'sd32768)
+            else if (sum < -21'sd32768)
                 optimized_convolution = -16'sd32768;
             else
                 optimized_convolution = sum[15:0];
